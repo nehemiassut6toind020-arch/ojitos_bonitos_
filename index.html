@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>for you 💐</title>
+<style>
+  :root{
+    --bg-1:#0f1020;
+    --bg-2:#1a1b36;
+    --txt:#ffffff;
+    --accent:#ff77aa;
+    --accent-2:#ffd166;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    color:var(--txt);
+    background:
+      radial-gradient(1200px 800px at 20% 0%, #271b46 0%, transparent 60%),
+      radial-gradient(1200px 800px at 80% 100%, #112a46 0%, transparent 60%),
+      linear-gradient(160deg,var(--bg-1),var(--bg-2));
+    overflow:hidden;
+  }
+
+  /* Contenido UI */
+  .wrap{
+    position:fixed; inset:0;
+    display:grid; place-items:center;
+    padding:24px;
+  }
+  .card{
+    width:min(680px,100%);
+    background:rgba(255,255,255,.06);
+    backdrop-filter: blur(6px);
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:28px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.35);
+    padding:28px 24px;
+    text-align:center;
+  }
+  h1{
+    margin:8px 0 2px;
+    font-size:clamp(28px,6vw,42px);
+    line-height:1.1;
+    letter-spacing:.5px;
+  }
+  .subtitle{
+    opacity:.85;
+    margin:0 0 12px;
+    font-size:clamp(16px,3.6vw,18px);
+  }
+  .btn{
+    appearance:none; border:0; cursor:pointer;
+    padding:14px 20px; border-radius:18px;
+    font-weight:700; letter-spacing:.3px;
+    background:linear-gradient(135deg,var(--accent),#ff9ec5);
+    color:#180a10; box-shadow:0 8px 20px rgba(255,119,170,.35);
+    transition:transform .15s ease, box-shadow .15s ease, filter .2s ease;
+  }
+  .btn:hover{ transform:translateY(-2px); box-shadow:0 12px 28px rgba(255,119,170,.45) }
+  .btn:active{ transform:translateY(0) scale(.98) }
+
+  .note{
+    margin-top:12px; opacity:.8; font-size:.95rem;
+  }
+
+  /* Mensaje final */
+  .msg{
+    position:fixed; inset:0; display:grid; place-items:center; pointer-events:none;
+    text-align:center; padding:24px; opacity:0; transition:opacity .8s ease .2s;
+  }
+  .msg.show{ opacity:1 }
+  .msg h2{
+    margin:0 0 8px; font-size:clamp(26px,7vw,46px)
+  }
+  .msg p{
+    margin:0 auto; max-width:720px; font-size:clamp(16px,3.8vw,20px); opacity:.92
+  }
+
+  /* Letrero superior */
+  .ribbon{
+    position:fixed; top:16px; left:50%; transform:translateX(-50%);
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.15);
+    border-radius:999px; padding:8px 14px; font-weight:600; letter-spacing:.25px;
+    backdrop-filter: blur(6px);
+  }
+
+  /* Accesibilidad: reduce movimiento */
+  @media (prefers-reduced-motion: reduce){
+    .btn, .msg{ transition:none !important }
+  }
+</style>
+</head>
+<body>
+  <div class="ribbon" id="ribbon">Para ti 💐</div>
+
+  <div class="wrap" id="start">
+    <div class="card">
+      <h1 id="title">Hola, <span id="name">Amor</span> ✨</h1>
+      <p class="subtitle">Tengo una pequeña sorpresa… toque el botón para abrirla.</p>
+      <button class="btn" id="goBtn">Abrir sorpresa</button>
+      <p class="note">Tip: toque o haga clic en la pantalla para crear más flores.</p>
+    </div>
+  </div>
+
+  <canvas id="scene" aria-hidden="true"></canvas>
+
+  <div class="msg" id="finalMsg" aria-live="polite">
+    <div>
+      <h2 id="headline">Para ti, con todo mi cariño 💖</h2>
+      <p id="message">Cada pétalo es un “te quiero”. Gracias por existir y por hacer mis días más bonitos.</p>
+    </div>
+  </div>
+
+<script>
+/* ========= PERSONALIZA AQUÍ ========= */
+const CONFIG = {
+  recipientName: "bonita de ojos bonitos",                 // Cambia el nombre que aparece en el saludo (ej. "Sofía", "Mi vida", etc.)
+  headline: "Para usted, con mucho cariño 💖",
+  message: "Cada pétalo es para usted, todo esto por bonita, por cierto, me gustan mucho sus ojoooooooooos.",
+  petalPalette: ["#ffc1d9","#ff8fb3","#ff77aa","#ffbdd6","#ffd6e8","#ffd1a6","#ffe0b2","#ffadc6"],
+  maxFlowersDesktop: 90,
+  maxFlowersMobile: 60,
+  bloomDurationMs: 1800, // tiempo de florecer de cada flor
+  wind: 0.12              // viento horizontal de los pétalos que caen
+};
+/* ==================================== */
+
+const nameEl = document.getElementById("name");
+const titleEl = document.getElementById("title");
+const goBtn = document.getElementById("goBtn");
+const startWrap = document.getElementById("start");
+const ribbon = document.getElementById("ribbon");
+const finalMsg = document.getElementById("finalMsg");
+const headlineEl = document.getElementById("headline");
+const messageEl = document.getElementById("message");
+
+nameEl.textContent = CONFIG.recipientName;
+headlineEl.textContent = CONFIG.headline;
+messageEl.textContent = CONFIG.message;
+
+const canvas = document.getElementById("scene");
+const ctx = canvas.getContext("2d", { alpha:true });
+
+let W=innerWidth, H=innerHeight, DPR=Math.min(2, devicePixelRatio||1);
+function resize(){
+  W = innerWidth; H = innerHeight;
+  canvas.width = Math.floor(W*DPR);
+  canvas.height = Math.floor(H*DPR);
+  canvas.style.width = W+"px"; canvas.style.height = H+"px";
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+addEventListener("resize", resize, {passive:true});
+resize();
+
+/* ---------- Utilidades ---------- */
+const rand = (a,b)=> a + Math.random()*(b-a);
+const pick = arr => arr[(Math.random()*arr.length)|0];
+
+/* Dibuja una “flor” con 5-7 pétalos tipo elipse rotada */
+function drawFlower(x,y,scale,rotation,color,progress){
+  // progress: 0..1 (0 = cerrada, 1 = abierta)
+  const petals = 6;
+  const radius = 12*scale*progress;  // radio del pétalo crece
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.rotate(rotation);
+  for(let i=0;i<petals;i++){
+    const ang = i*(Math.PI*2/petals);
+    ctx.save();
+    ctx.rotate(ang);
+    ctx.beginPath();
+    // pétalo como elipse
+    ctx.ellipse(0, -radius*1.1, radius*.8, radius*1.6, 0, 0, Math.PI*2);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.9;
+    ctx.fill();
+    ctx.restore();
+  }
+  // centro
+  ctx.beginPath();
+  ctx.arc(0,0, 3.3*scale*progress, 0, Math.PI*2);
+  ctx.fillStyle = "#ffd166";
+  ctx.globalAlpha = 1;
+  ctx.fill();
+  ctx.restore();
+}
+
+/* Pétalo suelto que cae */
+class FallingPetal{
+  constructor(){
+    this.reset(true);
+  }
+  reset(init=false){
+    this.x = init ? rand(0, W) : (Math.random()<.3 ? rand(0,W) : (this.x%W));
+    this.y = init ? rand(-H, 0) : -10;
+    this.vy = rand(0.3, 1.2);
+    this.vx = rand(-0.2, 0.2) + CONFIG.wind;
+    this.size = rand(6,12);
+    this.rot = rand(0, Math.PI*2);
+    this.spin = rand(-0.02, 0.02);
+    this.color = pick(CONFIG.petalPalette);
+  }
+  tick(){
+    this.x += this.vx;
+    this.y += this.vy;
+    this.rot += this.spin;
+    if(this.y > H + 20) this.reset(false);
+  }
+  draw(){
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.rot);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.size*0.6, this.size, 0, 0, Math.PI*2);
+    ctx.fillStyle = this.color;
+    ctx.globalAlpha = 0.85;
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* Flor que florece */
+class Flower{
+  constructor(x,y){
+    this.x=x; this.y=y;
+    this.scale = rand(0.7, 1.35);
+    this.rot = rand(0, Math.PI*2);
+    this.color = pick(CONFIG.petalPalette);
+    this.t0 = performance.now();
+    this.duration = CONFIG.bloomDurationMs * rand(0.85, 1.25);
+    this.progress = 0;
+  }
+  tick(t){
+    const p = Math.min(1, (t - this.t0)/this.duration);
+    // easing suave (easeOutBack)
+    const c1=1.70158, c3=c1+1;
+    this.progress = 1 + c3*Math.pow(p-1,3) + c1*Math.pow(p-1,2); // overshoot bonito
+  }
+  draw(){
+    drawFlower(this.x, this.y, this.scale, this.rot, this.color, this.progress);
+  }
+}
+
+const isMobile = /Mobi|Android|iPhone/i.test(navigator.userAgent);
+const targetFlowers = isMobile ? CONFIG.maxFlowersMobile : CONFIG.maxFlowersDesktop;
+
+const petals = Array.from({length: Math.floor(targetFlowers*1.8)}, ()=> new FallingPetal());
+let flowers = [];
+
+/* Crea varias flores “subiendo” desde el centro */
+function seedFlowers(n=28){
+  for(let i=0;i<n;i++){
+    const angle = rand(0, Math.PI*2);
+    const r = rand(10, Math.min(W,H)*0.42);
+    const x = W/2 + Math.cos(angle)*r;
+    const y = H/2 + Math.sin(angle)*r;
+    flowers.push(new Flower(x,y));
+  }
+  if(flowers.length > targetFlowers) flowers = flowers.slice(-targetFlowers);
+}
+
+/* Interacciones para crear flores con clic/tap */
+function spawnBurst(x,y){
+  for(let i=0;i<10;i++){
+    const dx = rand(-60,60), dy = rand(-60,60);
+    flowers.push(new Flower(x+dx,y+dy));
+  }
+  if(flowers.length > targetFlowers) flowers = flowers.slice(-targetFlowers);
+}
+
+canvas.addEventListener("pointerdown", e=>{
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left);
+  const y = (e.clientY - rect.top);
+  spawnBurst(x,y);
+});
+
+/* Animación principal */
+let running=false;
+function loop(t){
+  if(!running) return;
+  ctx.clearRect(0,0,W,H);
+
+  // pétalos cayendo
+  for(const p of petals){ p.tick(); p.draw(); }
+
+  // flores
+  for(const f of flowers){ f.tick(t); f.draw(); }
+
+  requestAnimationFrame(loop);
+}
+
+/* Inicio al pulsar botón */
+goBtn.addEventListener("click", ()=>{
+  startWrap.style.display = "none";
+  ribbon.textContent = `Para ${CONFIG.recipientName} 💐`;
+  finalMsg.classList.add("show");
+  running = true;
+  seedFlowers(44);
+  requestAnimationFrame(loop);
+});
+
+/* Semillas suaves mientras está en pantalla de inicio (opc) */
+let idleInterval = setInterval(()=>{
+  if(startWrap.style.display !== "none"){
+    // micro chispa
+    const x = rand(W*0.3, W*0.7);
+    const y = rand(H*0.3, H*0.7);
+    flowers.push(new Flower(x,y));
+    if(flowers.length > 24) flowers.shift();
+    ctx.clearRect(0,0,W,H);
+    for(const f of flowers){ f.tick(performance.now()); f.draw(); }
+  } else {
+    clearInterval(idleInterval);
+  }
+}, 800);
+
+</script>
+</body>
+</html>
